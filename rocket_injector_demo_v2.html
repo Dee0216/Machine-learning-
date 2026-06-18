@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rocket Injector Chamber Pressure Prediction - ML Demo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* Animations */
+        @keyframes rocketLaunch {
+            0% { transform: translateY(0px) rotate(-20deg); }
+            25% { transform: translateY(-30px) rotate(-15deg); }
+            50% { transform: translateY(-60px) rotate(0deg); }
+            75% { transform: translateY(-30px) rotate(15deg); }
+            100% { transform: translateY(0px) rotate(20deg); }
+        }
+
+        @keyframes flame {
+            0% { opacity: 0.6; transform: scaleY(1) translateY(0); }
+            50% { opacity: 1; transform: scaleY(1.1) translateY(2px); }
+            100% { opacity: 0.6; transform: scaleY(0.9) translateY(-2px); }
+        }
+
+        @keyframes combustion {
+            0% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pressureGauge {
+            0%, 100% { stroke-dashoffset: 0; }
+            50% { stroke-dashoffset: 5; }
+        }
+
+        /* Header with Rocket */
+        .header {
+            background: linear-gradient(135deg, #1e40af 0%, #1e293b 100%);
+            padding: 40px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border-left: 5px solid #3b82f6;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .rocket-animation {
+            font-size: 4em;
+            animation: rocketLaunch 3s ease-in-out infinite;
+            filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));
+        }
+
+        .flame {
+            font-size: 2em;
+            animation: flame 1s ease-in-out infinite;
+            margin-left: -10px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #60a5fa, #93c5fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            color: #cbd5e1;
+        }
+
+        .input-output-spec {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 15px;
+            font-size: 0.95em;
+        }
+
+        .spec-item {
+            background: rgba(30, 41, 59, 0.6);
+            padding: 10px 15px;
+            border-radius: 6px;
+            border-left: 3px solid #10b981;
+        }
+
+        .spec-item.output {
+            border-left-color: #f59e0b;
+        }
+
+        .spec-label {
+            color: #94a3b8;
+            font-size: 0.85em;
+            margin-bottom: 4px;
+        }
+
+        .spec-value {
+            color: #60a5fa;
+            font-weight: 600;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            background: #1e293b;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border: 2px dashed #3b82f6;
+            position: relative;
+        }
+
+        .combustion-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle, #ff6b00 0%, transparent 70%);
+            border-radius: 50%;
+            animation: combustion 2s ease-in-out infinite;
+            filter: drop-shadow(0 0 15px rgba(255, 107, 0, 0.8));
+        }
+
+        .upload-section h2 {
+            margin-bottom: 20px;
+            color: #60a5fa;
+        }
+
+        .upload-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .upload-box {
+            background: #0f172a;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #334155;
+            transition: all 0.3s;
+        }
+
+        .upload-box:hover {
+            border-color: #3b82f6;
+            background: #1a2942;
+        }
+
+        .upload-box label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #93c5fd;
+        }
+
+        .upload-box input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            background: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            color: #e2e8f0;
+            cursor: pointer;
+        }
+
+        .upload-box input[type="file"]::file-selector-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .upload-box input[type="file"]::file-selector-button:hover {
+            background: #2563eb;
+        }
+
+        .file-info {
+            font-size: 0.9em;
+            color: #94a3b8;
+            margin-top: 8px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1em;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-secondary {
+            background: #475569;
+            color: #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background: #64748b;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(16, 185, 129, 0.4);
+        }
+
+        /* Status Messages */
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .status.show {
+            display: block;
+        }
+
+        .status.success {
+            background: #065f46;
+            color: #86efac;
+            border-left: 4px solid #10b981;
+        }
+
+        .status.error {
+            background: #7f1d1d;
+            color: #fca5a5;
+            border-left: 4px solid #ef4444;
+        }
+
+        .status.info {
+            background: #0c2340;
+            color: #93c5fd;
+            border-left: 4px solid #3b82f6;
+        }
+
+        /* Main Content Grid */
+        .content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #334155;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .card h3 {
+            color: #60a5fa;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        /* Pressure Gauge */
+        .pressure-gauge {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            margin: 0 auto 20px;
+        }
+
+        .gauge-svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
+        }
+
+        .gauge-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+        }
+
+        .gauge-number {
+            font-size: 2em;
+            font-weight: 700;
+            color: #60a5fa;
+        }
+
+        .gauge-unit {
+            font-size: 0.8em;
+            color: #94a3b8;
+        }
+
+        /* Test Data List */
+        .test-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .test-item {
+            padding: 12px;
+            background: #0f172a;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            border-left: 3px solid #475569;
+            transition: all 0.3s;
+        }
+
+        .test-item:hover {
+            border-left-color: #3b82f6;
+            background: #1a2942;
+            transform: translateX(4px);
+        }
+
+        .test-item.active {
+            background: #1e3a5f;
+            border-left-color: #10b981;
+        }
+
+        .test-item-title {
+            font-weight: 600;
+            color: #93c5fd;
+            margin-bottom: 4px;
+        }
+
+        .test-item-meta {
+            font-size: 0.85em;
+            color: #94a3b8;
+        }
+
+        /* Metrics Card */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .metric {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #334155;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #93c5fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .chart-container {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid #334155;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .chart-container h3 {
+            color: #60a5fa;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+
+        /* Grid Layout for Charts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 1200px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Table Styles */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        table thead {
+            background: #0f172a;
+            border-bottom: 2px solid #3b82f6;
+        }
+
+        table th {
+            padding: 12px;
+            text-align: left;
+            color: #60a5fa;
+            font-weight: 600;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #334155;
+        }
+
+        table tbody tr:hover {
+            background: #1a2942;
+        }
+
+        .error-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .error-low {
+            background: #065f46;
+            color: #86efac;
+        }
+
+        .error-medium {
+            background: #92400e;
+            color: #fcd34d;
+        }
+
+        .error-high {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #334155;
+        }
+
+        .tab-btn {
+            padding: 12px 20px;
+            background: transparent;
+            color: #94a3b8;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .tab-btn:hover {
+            color: #60a5fa;
+        }
+
+        .tab-btn.active {
+            color: #60a5fa;
+            border-bottom-color: #3b82f6;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Loading State */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #334155;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Feature Importance */
+        .feature-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .feature-name {
+            width: 150px;
+            color: #93c5fd;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .feature-bar-bg {
+            flex: 1;
+            background: #0f172a;
+            border-radius: 6px;
+            height: 30px;
+            overflow: hidden;
+            margin: 0 15px;
+            border: 1px solid #334155;
+        }
+
+        .feature-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            transition: width 0.5s;
+        }
+
+        .feature-value {
+            color: #e2e8f0;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #64748b;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .empty-state h3 {
+            color: #94a3b8;
+            margin-bottom: 10px;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .upload-container {
+                grid-template-columns: 1fr;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .input-output-spec {
+                grid-template-columns: 1fr;
+            }
+
+            .header-content {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+
+        /* Rocket Injector Diagram */
+        .injector-diagram {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .injector-svg {
+            width: 100%;
+            max-width: 200px;
+            margin: 0 auto;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header with Rocket Animation -->
+        <div class="header">
+            <div class="header-content">
+                <div>
+                    <div class="rocket-animation">🚀<span class="flame">🔥</span></div>
+                </div>
+                <div>
+                    <h1>Rocket Injector Chamber Pressure Prediction</h1>
+                    <p>Machine Learning Model for Combustion Chamber Analysis</p>
+                    <div class="input-output-spec">
+                        <div class="spec-item">
+                            <div class="spec-label">📥 Inputs</div>
+                            <div class="spec-value">Inlet Pressure + Oxidizer Pressure</div>
+                        </div>
+                        <div class="spec-item output">
+                            <div class="spec-label">📤 Output</div>
+                            <div class="spec-value">Chamber Pressure</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="combustion-indicator"></div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <h2>📤 Load Your Model & Test Data</h2>
+            <div class="upload-container">
+                <div class="upload-box">
+                    <label for="modelFile">Model File (.pkl)</label>
+                    <input type="file" id="modelFile" accept=".pkl" />
+                    <div class="file-info">Upload your trained pickle model</div>
+                </div>
+                <div class="upload-box">
+                    <label for="testDataFile">Test Data (.xlsx or .csv)</label>
+                    <input type="file" id="testDataFile" accept=".xlsx,.csv" />
+                    <div class="file-info">Inlet Pressure, Oxidizer Pressure, Chamber Pressure</div>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn-primary" onclick="loadFiles()">Load Files</button>
+                <button class="btn-secondary" onclick="loadDemoData()">📊 Load Demo Data</button>
+                <button class="btn-secondary" onclick="downloadTemplate()">📥 Download Template</button>
+            </div>
+            <div id="status" class="status"></div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Pressure Gauge Card -->
+                <div class="card">
+                    <h3>⚡ Chamber Pressure</h3>
+                    <div class="pressure-gauge">
+                        <svg class="gauge-svg" viewBox="0 0 200 200">
+                            <!-- Background circle -->
+                            <circle cx="100" cy="100" r="90" fill="none" stroke="#334155" stroke-width="2"/>
+                            <!-- Gauge arc -->
+                            <circle cx="100" cy="100" r="90" fill="none" stroke="#3b82f6" stroke-width="8" 
+                                    stroke-dasharray="471.2" stroke-dashoffset="235.6" 
+                                    stroke-linecap="round" style="animation: pressureGauge 2s ease-in-out infinite;"/>
+                            <!-- Center circle -->
+                            <circle cx="100" cy="100" r="15" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+                        </svg>
+                        <div class="gauge-value">
+                            <div class="gauge-number" id="avgPressure">—</div>
+                            <div class="gauge-unit">bar</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Overall Metrics -->
+                <div class="card">
+                    <h3>📈 Overall Metrics</h3>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <div class="metric-label">R² Score</div>
+                            <div class="metric-value" id="r2Score">—</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">RMSE</div>
+                            <div class="metric-value" id="rmseValue">—</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">MAE</div>
+                            <div class="metric-value" id="maeValue">—</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">MAPE</div>
+                            <div class="metric-value" id="mapeValue">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Test Data List -->
+                <div class="card">
+                    <h3>📋 Test Cases</h3>
+                    <div class="test-list" id="testList">
+                        <div class="empty-state-icon">📁</div>
+                        <p style="color: #64748b; text-align: center;">No data loaded</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="main-content">
+                <div id="loadingState" class="loading">
+                    <div class="spinner"></div>
+                    <p>Processing data...</p>
+                </div>
+
+                <div id="emptyState" class="empty-state">
+                    <div class="empty-state-icon">🔥</div>
+                    <h3>Ready to Analyze</h3>
+                    <p>Upload your model and test data or load demo data to begin combustion analysis</p>
+                </div>
+
+                <div id="mainView" style="display: none;">
+                    <!-- Tabs -->
+                    <div class="tabs">
+                        <button class="tab-btn active" onclick="switchTab('overview')">Overview</button>
+                        <button class="tab-btn" onclick="switchTab('predictions')">Predictions</button>
+                        <button class="tab-btn" onclick="switchTab('analysis')">Analysis</button>
+                        <button class="tab-btn" onclick="switchTab('features')">Features</button>
+                    </div>
+
+                    <!-- Overview Tab -->
+                    <div id="overview" class="tab-content active">
+                        <div class="charts-grid">
+                            <div class="chart-container">
+                                <h3>⚡ Chamber Pressure: Pred vs Actual</h3>
+                                <div class="chart-wrapper">
+                                    <canvas id="scatterChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-container">
+                                <h3>📈 Pressure Predictions Over Tests</h3>
+                                <div class="chart-wrapper">
+                                    <canvas id="lineChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-container" style="margin-top: 20px;">
+                            <h3>🔗 Inlet Pressure vs Oxidizer Pressure (Colored by Chamber Pressure)</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="inputChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Predictions Tab -->
+                    <div id="predictions" class="tab-content">
+                        <div class="chart-container">
+                            <h3>🎯 Detailed Pressure Predictions</h3>
+                            <div class="table-container">
+                                <table id="predictionsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Index</th>
+                                            <th>Inlet Press.</th>
+                                            <th>Oxidizer Press.</th>
+                                            <th>Predicted</th>
+                                            <th>Actual</th>
+                                            <th>Error</th>
+                                            <th>Error %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Analysis Tab -->
+                    <div id="analysis" class="tab-content">
+                        <div class="charts-grid">
+                            <div class="chart-container">
+                                <h3>📊 Residual Distribution</h3>
+                                <div class="chart-wrapper">
+                                    <canvas id="residualChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-container">
+                                <h3>📉 Absolute Error Distribution</h3>
+                                <div class="chart-wrapper">
+                                    <canvas id="errorHistogram"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Features Tab -->
+                    <div id="features" class="tab-content">
+                        <div class="chart-container">
+                            <h3>🎯 Feature Importance</h3>
+                            <div id="featureImportance"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let data = {
+            predictions: [],
+            actuals: [],
+            inletPressure: [],
+            oxidiserPressure: [],
+            featureNames: ['Inlet Pressure', 'Oxidizer Pressure'],
+            testIndices: []
+        };
+
+        let charts = {};
+
+        // Load demo data
+        function loadDemoData() {
+            showStatus('🔥 Igniting demo data...', 'info');
+            
+            // Simulate realistic pressure data
+            const n = 60;
+            data.predictions = [];
+            data.actuals = [];
+            data.inletPressure = [];
+            data.oxidiserPressure = [];
+            data.testIndices = [];
+
+            for (let i = 0; i < n; i++) {
+                // Generate realistic inlet and oxidizer pressures
+                const inletPress = 5 + Math.random() * 20;
+                const oxidiserPress = 8 + Math.random() * 25;
+                
+                // Simulate actual chamber pressure (realistic physics-based relationship)
+                // Chamber pressure is roughly proportional to sum of inlet and oxidizer pressures
+                const actual = (inletPress * 1.2 + oxidiserPress * 1.5) + (Math.random() - 0.5) * 5;
+                
+                // Simulate prediction (model adds small error)
+                const pred = actual + (Math.random() - 0.5) * 4;
+                
+                data.actuals.push(Math.max(15, Math.min(120, actual)));
+                data.predictions.push(Math.max(15, Math.min(120, pred)));
+                data.inletPressure.push(inletPress);
+                data.oxidiserPressure.push(oxidiserPress);
+                data.testIndices.push(`Test ${i + 1}`);
+            }
+
+            setTimeout(() => {
+                showStatus('✅ Demo data loaded! Combustion sequence ready.', 'success');
+                displayAnalysis();
+                document.getElementById('emptyState').style.display = 'none';
+                document.getElementById('mainView').style.display = 'block';
+            }, 500);
+        }
+
+        // Load files
+        async function loadFiles() {
+            const modelFile = document.getElementById('modelFile').files[0];
+            const testDataFile = document.getElementById('testDataFile').files[0];
+
+            if (!modelFile || !testDataFile) {
+                showStatus('❌ Please select both model and test data files', 'error');
+                return;
+            }
+
+            showStatus('🚀 Loading files...', 'info');
+            document.getElementById('loadingState').classList.add('show');
+
+            try {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const content = e.target.result;
+                    
+                    if (testDataFile.name.endsWith('.csv')) {
+                        Papa.parse(content, {
+                            header: true,
+                            skipEmptyLines: true,
+                            complete: (results) => {
+                                processTestData(results.data);
+                            }
+                        });
+                    } else if (testDataFile.name.endsWith('.xlsx')) {
+                        showStatus('📌 For Excel files, please convert to CSV or use the demo template', 'info');
+                        document.getElementById('loadingState').classList.remove('show');
+                    }
+                };
+                reader.readAsText(testDataFile);
+
+            } catch (error) {
+                showStatus('❌ Error loading files: ' + error.message, 'error');
+                document.getElementById('loadingState').classList.remove('show');
+            }
+        }
+
+        // Process test data
+        function processTestData(csvData) {
+            try {
+                data.predictions = [];
+                data.actuals = [];
+                data.inletPressure = [];
+                data.oxidiserPressure = [];
+                data.testIndices = [];
+
+                if (!csvData || csvData.length === 0) throw new Error('Empty data');
+
+                csvData.forEach((row, idx) => {
+                    try {
+                        const inletPress = parseFloat(row.inlet_pressure || row.inletpressure || row['inlet pressure'] || 0);
+                        const oxidiserPress = parseFloat(row.oxidizer_pressure || row.oxidizerpressure || row['oxidizer pressure'] || row.oxidiser_pressure || 0);
+                        const pred = parseFloat(row.predicted || row.prediction || row.pred || 0);
+                        const actual = parseFloat(row.actual || row.chamber_pressure || row['chamber pressure'] || 0);
+                        
+                        if (isNaN(pred) || isNaN(actual) || isNaN(inletPress) || isNaN(oxidiserPress)) return;
+
+                        data.predictions.push(pred);
+                        data.actuals.push(actual);
+                        data.inletPressure.push(inletPress);
+                        data.oxidiserPressure.push(oxidiserPress);
+                        data.testIndices.push(`Test ${idx + 1}`);
+                    } catch (e) {
+                        console.error('Row error:', e);
+                    }
+                });
+
+                if (data.predictions.length === 0) throw new Error('No valid data found');
+
+                document.getElementById('loadingState').classList.remove('show');
+                showStatus(`✅ Loaded ${data.predictions.length} test cases`, 'success');
+                displayAnalysis();
+                document.getElementById('emptyState').style.display = 'none';
+                document.getElementById('mainView').style.display = 'block';
+
+            } catch (error) {
+                document.getElementById('loadingState').classList.remove('show');
+                showStatus('❌ Error processing data: ' + error.message, 'error');
+            }
+        }
+
+        // Calculate metrics
+        function calculateMetrics() {
+            const n = data.predictions.length;
+            if (n === 0) return {};
+
+            const meanActual = data.actuals.reduce((a, b) => a + b) / n;
+            
+            const ssRes = data.predictions.reduce((sum, pred, i) => sum + Math.pow(pred - data.actuals[i], 2), 0);
+            const ssTot = data.actuals.reduce((sum, actual) => sum + Math.pow(actual - meanActual, 2), 0);
+            const r2 = ssTot === 0 ? 0 : 1 - (ssRes / ssTot);
+
+            const rmse = Math.sqrt(ssRes / n);
+            const mae = data.predictions.reduce((sum, pred, i) => sum + Math.abs(pred - data.actuals[i]), 0) / n;
+            const mape = data.actuals.reduce((sum, actual, i) => {
+                return actual === 0 ? sum : sum + Math.abs((data.predictions[i] - actual) / actual);
+            }, 0) / n * 100;
+
+            const avgPressure = data.actuals.reduce((a, b) => a + b) / n;
+
+            return { r2: r2.toFixed(4), rmse: rmse.toFixed(2), mae: mae.toFixed(2), mape: mape.toFixed(2), avgPressure: avgPressure.toFixed(2) };
+        }
+
+        // Calculate feature importance
+        function calculateFeatureImportance() {
+            const errors = data.predictions.map((p, i) => Math.abs(p - data.actuals[i]));
+            const meanError = errors.reduce((a, b) => a + b) / errors.length;
+            
+            const importances = [
+                { name: 'Inlet Pressure', data: data.inletPressure },
+                { name: 'Oxidizer Pressure', data: data.oxidiserPressure }
+            ].map(feature => {
+                const featureValues = feature.data;
+                const meanFeature = featureValues.reduce((a, b) => a + b) / featureValues.length;
+                
+                const numerator = featureValues.reduce((sum, fval, i) => {
+                    return sum + (fval - meanFeature) * (errors[i] - meanError);
+                }, 0);
+                
+                const denominator = Math.sqrt(
+                    featureValues.reduce((sum, fval) => sum + Math.pow(fval - meanFeature, 2), 0) *
+                    errors.reduce((sum, e) => sum + Math.pow(e - meanError, 2), 0)
+                );
+                
+                return { name: feature.name, importance: Math.abs(denominator === 0 ? 0 : numerator / denominator) };
+            });
+
+            return importances.sort((a, b) => b.importance - a.importance);
+        }
+
+        // Display analysis
+        function displayAnalysis() {
+            const metrics = calculateMetrics();
+            
+            document.getElementById('r2Score').textContent = metrics.r2 || '—';
+            document.getElementById('rmseValue').textContent = metrics.rmse || '—';
+            document.getElementById('maeValue').textContent = metrics.mae || '—';
+            document.getElementById('mapeValue').textContent = metrics.mape || '—';
+            document.getElementById('avgPressure').textContent = metrics.avgPressure || '—';
+
+            updateTestList();
+            createScatterChart();
+            createLineChart();
+            createInputChart();
+            createResidualChart();
+            createErrorHistogram();
+            updatePredictionsTable();
+            updateFeatureImportance();
+        }
+
+        // Update test list
+        function updateTestList() {
+            const listDiv = document.getElementById('testList');
+            if (data.testIndices.length === 0) return;
+
+            listDiv.innerHTML = data.testIndices.map((idx, i) => `
+                <div class="test-item" onclick="selectTest(${i})">
+                    <div class="test-item-title">${idx}</div>
+                    <div class="test-item-meta">
+                        Inlet: ${data.inletPressure[i].toFixed(1)} | Ox: ${data.oxidiserPressure[i].toFixed(1)} bar
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Scatter Chart
+        function createScatterChart() {
+            const ctx = document.getElementById('scatterChart').getContext('2d');
+            
+            if (charts.scatter) charts.scatter.destroy();
+            
+            const minVal = Math.min(...data.actuals, ...data.predictions);
+            const maxVal = Math.max(...data.actuals, ...data.predictions);
+            const lineData = [
+                { x: minVal, y: minVal },
+                { x: maxVal, y: maxVal }
+            ];
+
+            charts.scatter = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Predictions vs Actual',
+                            data: data.actuals.map((actual, i) => ({ x: actual, y: data.predictions[i] })),
+                            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            borderWidth: 2,
+                            pointRadius: 5,
+                            pointHoverRadius: 7
+                        },
+                        {
+                            label: 'Perfect Prediction',
+                            data: lineData,
+                            type: 'line',
+                            borderColor: 'rgba(34, 197, 94, 0.6)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1' } }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Actual Chamber Pressure (bar)', color: '#cbd5e1' },
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Predicted Chamber Pressure (bar)', color: '#cbd5e1' },
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Line Chart
+        function createLineChart() {
+            const ctx = document.getElementById('lineChart').getContext('2d');
+            
+            if (charts.line) charts.line.destroy();
+            
+            charts.line = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.testIndices,
+                    datasets: [
+                        {
+                            label: 'Predicted Pressure',
+                            data: data.predictions,
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            label: 'Actual Pressure',
+                            data: data.actuals,
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1' } }
+                    },
+                    scales: {
+                        y: {
+                            title: { display: true, text: 'Chamber Pressure (bar)', color: '#cbd5e1' },
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        },
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Input Chart (Inlet vs Oxidizer colored by Chamber Pressure)
+        function createInputChart() {
+            const ctx = document.getElementById('inputChart').getContext('2d');
+            
+            if (charts.input) charts.input.destroy();
+            
+            // Create color scale based on chamber pressure
+            const colors = data.actuals.map(pressure => {
+                const min = Math.min(...data.actuals);
+                const max = Math.max(...data.actuals);
+                const normalized = (pressure - min) / (max - min);
+                
+                // Blue to Red gradient
+                const hue = normalized * 240; // 240 = blue, 0 = red
+                return `hsl(${240 - hue}, 100%, 50%)`;
+            });
+
+            charts.input = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Inlet vs Oxidizer Pressure',
+                        data: data.inletPressure.map((inlet, i) => ({
+                            x: inlet,
+                            y: data.oxidiserPressure[i]
+                        })),
+                        backgroundColor: colors,
+                        borderColor: colors,
+                        borderWidth: 2,
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1' } }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Inlet Pressure (bar)', color: '#cbd5e1' },
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Oxidizer Pressure (bar)', color: '#cbd5e1' },
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Residual Chart
+        function createResidualChart() {
+            const ctx = document.getElementById('residualChart').getContext('2d');
+            const residuals = data.predictions.map((p, i) => p - data.actuals[i]);
+            
+            if (charts.residual) charts.residual.destroy();
+            
+            charts.residual = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Residuals',
+                        data: data.actuals.map((actual, i) => ({ x: actual, y: residuals[i] })),
+                        backgroundColor: 'rgba(249, 115, 22, 0.6)',
+                        borderColor: 'rgba(249, 115, 22, 1)',
+                        borderWidth: 2,
+                        pointRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1' } }
+                    },
+                    scales: {
+                        y: {
+                            title: { display: true, text: 'Residual (bar)', color: '#cbd5e1' },
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Actual Pressure (bar)', color: '#cbd5e1' },
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Error Histogram
+        function createErrorHistogram() {
+            const ctx = document.getElementById('errorHistogram').getContext('2d');
+            const errors = data.predictions.map((p, i) => Math.abs(p - data.actuals[i]));
+            const bins = [0, 1, 2, 3, 4, 5, 7, 10];
+            const hist = Array(bins.length - 1).fill(0);
+            
+            errors.forEach(err => {
+                for (let i = 0; i < bins.length - 1; i++) {
+                    if (err >= bins[i] && err < bins[i + 1]) {
+                        hist[i]++;
+                        break;
+                    }
+                }
+            });
+
+            if (charts.histogram) charts.histogram.destroy();
+            
+            charts.histogram = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: bins.slice(0, -1).map((b, i) => `${b}-${bins[i + 1]} bar`),
+                    datasets: [{
+                        label: 'Frequency',
+                        data: hist,
+                        backgroundColor: 'rgba(139, 92, 246, 0.7)',
+                        borderColor: 'rgba(139, 92, 246, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1' } }
+                    },
+                    scales: {
+                        y: {
+                            title: { display: true, text: 'Count', color: '#cbd5e1' },
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Absolute Error Range', color: '#cbd5e1' },
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update predictions table
+        function updatePredictionsTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = data.predictions.map((pred, i) => {
+                const actual = data.actuals[i];
+                const error = pred - actual;
+                const errorPct = actual === 0 ? 0 : (error / actual * 100);
+                const absError = Math.abs(error);
+                
+                let errorClass = absError < 1 ? 'error-low' : absError < 3 ? 'error-medium' : 'error-high';
+                
+                return `
+                    <tr>
+                        <td>${data.testIndices[i]}</td>
+                        <td>${data.inletPressure[i].toFixed(2)}</td>
+                        <td>${data.oxidiserPressure[i].toFixed(2)}</td>
+                        <td>${pred.toFixed(2)}</td>
+                        <td>${actual.toFixed(2)}</td>
+                        <td>${error.toFixed(2)}</td>
+                        <td><span class="error-badge ${errorClass}">${errorPct.toFixed(2)}%</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Update feature importance
+        function updateFeatureImportance() {
+            const importance = calculateFeatureImportance();
+            const maxImportance = importance[0]?.importance || 1;
+            
+            const html = importance.map(item => `
+                <div class="feature-bar">
+                    <div class="feature-name">${item.name}</div>
+                    <div class="feature-bar-bg">
+                        <div class="feature-bar-fill" style="width: ${(item.importance / maxImportance) * 100}%">
+                            <span class="feature-value">${(item.importance * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            document.getElementById('featureImportance').innerHTML = html;
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Select test case
+        function selectTest(index) {
+            document.querySelectorAll('.test-item').forEach(item => item.classList.remove('active'));
+            event.target.closest('.test-item').classList.add('active');
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status show ${type}`;
+        }
+
+        // Download template
+        function downloadTemplate() {
+            const csv = `inlet_pressure,oxidizer_pressure,predicted,actual
+8.3,12.5,27.5,26.3
+7.2,14.1,24.8,25.1
+10.5,16.3,35.1,36.2
+6.8,10.9,18.5,17.8
+12.1,18.5,42.2,41.5
+9.5,13.2,31.2,30.8
+11.2,15.8,39.1,38.5
+7.5,11.3,22.3,21.9
+8.9,14.7,29.8,30.2
+10.1,17.2,37.5,38.1`;
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'chamber_pressure_template.csv';
+            a.click();
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            showStatus('🚀 Rocket Injector Analysis Ready', 'info');
+        });
+    </script>
+</body>
+</html>
